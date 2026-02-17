@@ -26,31 +26,25 @@ async function fetchTodos() {
 // Add a new todo
 async function addTodo() {
     const text = todoInput.value.trim();
-    
     if (!text) {
         alert('Please enter a todo');
         return;
     }
-    
+
     try {
         const response = await fetch(API_BASE, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text }),
         });
-        
+
         if (response.ok) {
             const newTodo = await response.json();
             todos.push(newTodo);
             todoInput.value = '';
             renderTodos();
-        } else {
-            alert('Failed to add todo');
         }
     } catch (error) {
-        console.error('Error adding todo:', error);
         alert('Failed to add todo');
     }
 }
@@ -61,7 +55,7 @@ async function toggleTodo(id) {
         const response = await fetch(`${API_BASE}/${id}`, {
             method: 'PUT',
         });
-        
+
         if (response.ok) {
             const updatedTodo = await response.json();
             const index = todos.findIndex(t => t.id === id);
@@ -69,12 +63,29 @@ async function toggleTodo(id) {
                 todos[index] = updatedTodo;
                 renderTodos();
             }
-        } else {
-            alert('Failed to update todo');
         }
     } catch (error) {
-        console.error('Error toggling todo:', error);
         alert('Failed to update todo');
+    }
+}
+
+// ✅ EDIT TODO (NEW FEATURE)
+async function editTodo(id, currentText) {
+    const newText = prompt("Edit todo:", currentText);
+    if (!newText || newText.trim() === "") return;
+
+    try {
+        const response = await fetch(`${API_BASE}/${id}/edit`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: newText }),
+        });
+
+        if (response.ok) {
+            fetchTodos();
+        }
+    } catch (error) {
+        alert('Failed to edit todo');
     }
 }
 
@@ -84,50 +95,44 @@ async function deleteTodo(id) {
         const response = await fetch(`${API_BASE}/${id}`, {
             method: 'DELETE',
         });
-        
+
         if (response.ok) {
             todos = todos.filter(t => t.id !== id);
             renderTodos();
-        } else {
-            alert('Failed to delete todo');
         }
     } catch (error) {
-        console.error('Error deleting todo:', error);
         alert('Failed to delete todo');
     }
 }
 
-// Render todos to the DOM
+// Render todos
 function renderTodos() {
     if (todos.length === 0) {
         todoList.innerHTML = '<div class="empty-state">No todos yet. Add one above!</div>';
     } else {
         todoList.innerHTML = todos.map(todo => `
             <div class="todo-item ${todo.completed ? 'completed' : ''}">
-                <input 
-                    type="checkbox" 
-                    class="todo-checkbox" 
-                    ${todo.completed ? 'checked' : ''} 
+                <input
+                    type="checkbox"
+                    ${todo.completed ? 'checked' : ''}
                     onchange="toggleTodo(${todo.id})"
                 />
                 <span class="todo-text">${escapeHtml(todo.text)}</span>
-                <button class="delete-btn" onclick="deleteTodo(${todo.id})">Delete</button>
+                <button onclick="editTodo(${todo.id}, '${escapeHtml(todo.text)}')">Edit</button>
+                <button onclick="deleteTodo(${todo.id})">Delete</button>
             </div>
         `).join('');
     }
-    
     updateStats();
 }
 
 // Update statistics
 function updateStats() {
-    const total = todos.length;
-    const completed = todos.filter(t => t.completed).length;
-    totalCount.textContent = `Total: ${total}`;
-    completedCount.textContent = `Completed: ${completed}`;
+    totalCount.textContent = `Total: ${todos.length}`;
+    completedCount.textContent = `Completed: ${todos.filter(t => t.completed).length}`;
 }
 
-// Escape HTML to prevent XSS
+// Escape HTML
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -137,9 +142,7 @@ function escapeHtml(text) {
 // Event listeners
 addBtn.addEventListener('click', addTodo);
 todoInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        addTodo();
-    }
+    if (e.key === 'Enter') addTodo();
 });
 
 // Initialize
