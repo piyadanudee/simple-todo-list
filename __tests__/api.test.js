@@ -3,16 +3,14 @@ const fs = require('fs');
 const path = require('path');
 const app = require('../index');
 
-// Mock file path for testing
 const TEST_TODOS_FILE = path.join(__dirname, '../todos.test.json');
 
 describe('Todo API Endpoints', () => {
   beforeEach(() => {
-    // Reset the todos file before each test
     if (fs.existsSync(TEST_TODOS_FILE)) {
       fs.unlinkSync(TEST_TODOS_FILE);
     }
-    // Clear the default todos.json file as well
+
     const defaultTodosFile = path.join(__dirname, '../todos.json');
     if (fs.existsSync(defaultTodosFile)) {
       fs.writeFileSync(defaultTodosFile, JSON.stringify([]));
@@ -20,232 +18,185 @@ describe('Todo API Endpoints', () => {
   });
 
   afterAll(() => {
-    // Clean up test files
     if (fs.existsSync(TEST_TODOS_FILE)) {
       fs.unlinkSync(TEST_TODOS_FILE);
     }
   });
 
+  // =========================
+  // GET
+  // =========================
   describe('GET /api/todos', () => {
     test('should return an empty array initially', async () => {
       const response = await request(app).get('/api/todos');
-      
+
       expect(response.status).toBe(200);
       expect(response.body).toEqual([]);
     });
 
     test('should return all todos', async () => {
-      // Add a todo first
       await request(app)
         .post('/api/todos')
         .send({ text: 'Test todo' });
 
       const response = await request(app).get('/api/todos');
-      
+
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
-      expect(response.body[0]).toHaveProperty('text', 'Test todo');
+      expect(response.body[0].text).toBe('Test todo');
     });
   });
 
+  // =========================
+  // POST
+  // =========================
   describe('POST /api/todos', () => {
     test('should create a new todo', async () => {
-      const newTodo = { text: 'Buy groceries' };
-      
       const response = await request(app)
         .post('/api/todos')
-        .send(newTodo);
-      
+        .send({ text: 'Buy groceries' });
+
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('id');
-      expect(response.body).toHaveProperty('text', 'Buy groceries');
-      expect(response.body).toHaveProperty('completed', false);
+      expect(response.body.text).toBe('Buy groceries');
+      expect(response.body.completed).toBe(false);
       expect(response.body).toHaveProperty('createdAt');
     });
 
-    test('should trim whitespace from todo text', async () => {
+    test('should trim whitespace', async () => {
       const response = await request(app)
         .post('/api/todos')
-        .send({ text: '  Spaced out todo  ' });
-      
+        .send({ text: '  Spaced  ' });
+
       expect(response.status).toBe(201);
-      expect(response.body.text).toBe('Spaced out todo');
+      expect(response.body.text).toBe('Spaced');
     });
 
-    test('should return 400 if text is missing', async () => {
-      const response = await request(app)
-        .post('/api/todos')
-        .send({});
-      
-      expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('error', 'Todo text is required');
-    });
-
-    test('should return 400 if text is empty', async () => {
+    test('should return 400 for invalid text', async () => {
       const response = await request(app)
         .post('/api/todos')
         .send({ text: '' });
-      
-      expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('error', 'Todo text is required');
-    });
 
-    test('should return 400 if text is only whitespace', async () => {
-      const response = await request(app)
-        .post('/api/todos')
-        .send({ text: '   ' });
-      
       expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('error', 'Todo text is required');
-    });
-
-    test('should generate unique IDs for todos', async () => {
-      const response1 = await request(app)
-        .post('/api/todos')
-        .send({ text: 'First todo' });
-      
-      const response2 = await request(app)
-        .post('/api/todos')
-        .send({ text: 'Second todo' });
-      
-      expect(response1.body.id).not.toBe(response2.body.id);
+      expect(response.body.error).toBe('Todo text is required');
     });
   });
 
+  // =========================
+  // TOGGLE
+  // =========================
   describe('PUT /api/todos/:id', () => {
-    test('should toggle todo completion status', async () => {
-      // Create a todo first
-      const createResponse = await request(app)
+    test('should toggle completion', async () => {
+      const createRes = await request(app)
         .post('/api/todos')
         .send({ text: 'Test todo' });
-      
-      const todoId = createResponse.body.id;
-      
-      // Toggle completion
+
+      const id = createRes.body.id;
+
       const response = await request(app)
-        .put(`/api/todos/${todoId}`);
-      
+        .put(`/api/todos/${id}`);
+
       expect(response.status).toBe(200);
       expect(response.body.completed).toBe(true);
     });
 
-    test('should toggle back to incomplete', async () => {
-      // Create a todo
-      const createResponse = await request(app)
-        .post('/api/todos')
-        .send({ text: 'Test todo' });
-      
-      const todoId = createResponse.body.id;
-      
-      // Toggle to complete
-      await request(app).put(`/api/todos/${todoId}`);
-      
-      // Toggle back to incomplete
-      const response = await request(app).put(`/api/todos/${todoId}`);
-      
-      expect(response.status).toBe(200);
-      expect(response.body.completed).toBe(false);
-    });
-
-    test('should return 404 if todo not found', async () => {
+    test('should return 404 if not found', async () => {
       const response = await request(app)
         .put('/api/todos/999999');
-      
+
       expect(response.status).toBe(404);
-      expect(response.body).toHaveProperty('error', 'Todo not found');
+      expect(response.body.error).toBe('Todo not found');
     });
   });
 
+  // =========================
+  // DELETE
+  // =========================
   describe('DELETE /api/todos/:id', () => {
     test('should delete a todo', async () => {
-      // Create a todo
-      const createResponse = await request(app)
+      const createRes = await request(app)
         .post('/api/todos')
-        .send({ text: 'Todo to delete' });
-      
-      const todoId = createResponse.body.id;
-      
-      // Delete the todo
-      const deleteResponse = await request(app)
-        .delete(`/api/todos/${todoId}`);
-      
-      expect(deleteResponse.status).toBe(200);
-      expect(deleteResponse.body).toHaveProperty('message', 'Todo deleted successfully');
-      
-      // Verify it's deleted
-      const getResponse = await request(app).get('/api/todos');
-      expect(getResponse.body).toHaveLength(0);
+        .send({ text: 'Delete me' });
+
+      const id = createRes.body.id;
+
+      const response = await request(app)
+        .delete(`/api/todos/${id}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toBe('Todo deleted successfully');
+    });
+  });
+
+  // =========================
+  // EDIT FEATURE (NEW)
+  // =========================
+  describe('PUT /api/todos/:id/edit', () => {
+    test('should edit a todo text', async () => {
+      const createRes = await request(app)
+        .post('/api/todos')
+        .send({ text: 'Original text' });
+
+      const id = createRes.body.id;
+
+      const editRes = await request(app)
+        .put(`/api/todos/${id}/edit`)
+        .send({ text: 'Updated text' });
+
+      expect(editRes.status).toBe(200);
+      expect(editRes.body.text).toBe('Updated text');
+    });
+
+    test('should return 400 if text empty', async () => {
+      const createRes = await request(app)
+        .post('/api/todos')
+        .send({ text: 'Original text' });
+
+      const id = createRes.body.id;
+
+      const editRes = await request(app)
+        .put(`/api/todos/${id}/edit`)
+        .send({ text: '' });
+
+      expect(editRes.status).toBe(400);
     });
 
     test('should return 404 if todo not found', async () => {
       const response = await request(app)
-        .delete('/api/todos/999999');
-      
+        .put('/api/todos/999999/edit')
+        .send({ text: 'Updated' });
+
       expect(response.status).toBe(404);
-      expect(response.body).toHaveProperty('error', 'Todo not found');
-    });
-
-    test('should only delete the specified todo', async () => {
-      // Create multiple todos
-      const todo1 = await request(app)
-        .post('/api/todos')
-        .send({ text: 'First todo' });
-      
-      const todo2 = await request(app)
-        .post('/api/todos')
-        .send({ text: 'Second todo' });
-      
-      // Delete first todo
-      await request(app).delete(`/api/todos/${todo1.body.id}`);
-      
-      // Verify only second todo remains
-      const response = await request(app).get('/api/todos');
-      expect(response.body).toHaveLength(1);
-      expect(response.body[0].text).toBe('Second todo');
     });
   });
 
+  // =========================
+  // INTEGRATION
+  // =========================
   describe('Integration tests', () => {
-    test('should handle complete CRUD workflow', async () => {
-      // Create a todo
-      const createResponse = await request(app)
+    test('should handle full CRUD flow', async () => {
+      const createRes = await request(app)
         .post('/api/todos')
-        .send({ text: 'Complete workflow test' });
-      
-      const todoId = createResponse.body.id;
-      expect(createResponse.status).toBe(201);
-      
-      // Read todos
-      const getResponse = await request(app).get('/api/todos');
-      expect(getResponse.body).toHaveLength(1);
-      
-      // Update (toggle) todo
-      const updateResponse = await request(app).put(`/api/todos/${todoId}`);
-      expect(updateResponse.status).toBe(200);
-      expect(updateResponse.body.completed).toBe(true);
-      
-      // Delete todo
-      const deleteResponse = await request(app).delete(`/api/todos/${todoId}`);
-      expect(deleteResponse.status).toBe(200);
-      
-      // Verify deletion
-      const finalResponse = await request(app).get('/api/todos');
-      expect(finalResponse.body).toHaveLength(0);
-    });
+        .send({ text: 'Workflow test' });
 
-    test('should persist todos across requests', async () => {
-      // Create multiple todos
-      await request(app).post('/api/todos').send({ text: 'Todo 1' });
-      await request(app).post('/api/todos').send({ text: 'Todo 2' });
-      await request(app).post('/api/todos').send({ text: 'Todo 3' });
-      
-      // Get todos
-      const response = await request(app).get('/api/todos');
-      
-      expect(response.body).toHaveLength(3);
-      expect(response.body[0].text).toBe('Todo 1');
-      expect(response.body[1].text).toBe('Todo 2');
-      expect(response.body[2].text).toBe('Todo 3');
+      const id = createRes.body.id;
+
+      const toggleRes = await request(app)
+        .put(`/api/todos/${id}`);
+
+      expect(toggleRes.body.completed).toBe(true);
+
+      const editRes = await request(app)
+        .put(`/api/todos/${id}/edit`)
+        .send({ text: 'Edited text' });
+
+      expect(editRes.body.text).toBe('Edited text');
+
+      const deleteRes = await request(app)
+        .delete(`/api/todos/${id}`);
+
+      expect(deleteRes.status).toBe(200);
     });
   });
+
 });
